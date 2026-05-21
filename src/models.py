@@ -5,13 +5,28 @@ from .chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
 
 @dataclass
 class HospitalResources:
-    """Define los límites físicos y de personal del entorno."""
+    """Define los límites físicos, de personal y equipamiento del entorno."""
     hospital_name: str
-    total_beds: int
-    available_beds: int
-    total_doctors: int
-    available_doctors_time_minutes: int  # Capacidad total en minutos de atención
 
+    standard_beds_available: int      # Camillas normales de urgencias (Pacientes amarillos/verdes)
+    trauma_beds_available: int        # Boxes de reanimación (Solo para pacientes "1_Resuscitation")
+    isolation_beds_available: int     # Habitaciones de presión negativa (Si patient.is_isolated == True)
+    icu_beds_available: int           # Camas de Cuidados Intensivos (Para post-cirugía o casos críticos)
+   
+    triage_nurses_available: int      # Atienden la puerta, determinan el AVPU inicial
+    general_doctors_available: int    # Médicos de urgencias (consumen el doctor_time_estimated_min)
+    specialists_available: int        # Cirujanos, neurólogos, etc. (Casos muy complejos)
+    
+    # Capacidad de tiempo global para el turno
+    available_doctors_time_minutes: int 
+    ventilators_available: int        # Respiradores artificiales (Clave si la oxigenación es bajísima o Glasgow < 8)
+    operating_rooms_available: int    # Quirófanos libres
+    
+
+    # "Diversion status": Cuando un hospital colapsa, avisa a las ambulancias que vayan a otro lado.
+    # En tu algoritmo, si los recursos críticos llegan a 0, esto cambia a True.
+    is_on_diversion: bool = False
+    
 @dataclass
 class Vitals:
     """Signos vitales estructurados para cálculo matemático rápido."""
