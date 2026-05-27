@@ -1,8 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Dict
 from datetime import datetime
-
-from .chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+from chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
 
 # Tiempos máximos de espera permitidos (en minutos) por categoría Mánchester
 MAX_WAIT_TIMES: Dict[str, int] = {
@@ -24,6 +23,8 @@ class HospitalResources:
     icu_beds_available: int           # Camas de Cuidados Intensivos (Post-cirugía o críticos)
     operating_rooms_available: int    # Quirófanos libres
    
+
+    # Medicos y especialistas
     triage_nurses_available: int      # Atienden la puerta, determinan el AVPU inicial
     general_doctors_available: int    # Médicos de urgencias (Filtro inicial)
     available_doctors_time_minutes: int # Capacidad de tiempo global para el turno
@@ -105,30 +106,24 @@ class Patient:
     gender: str                  # "M", "F", "Other"
     insurance_type: str          # "Public", "Private", "None"
     arrival_time: datetime       # Fundamental para desempatar y calcular tiempos de espera
+    triage_notes: str            # Texto libre escrito por enfermería al llegar
+    medical_history_text: str    # Resumen del historial médico previo
+    vitals: Vitals
+
     is_pregnant: bool = False    # Triaje prioritario / requiere obstetra
     is_isolated: bool = False    # Requiere cama de presión negativa
-    
-    vitals: Vitals
     chronic_diseases: List[str] = field(default_factory=list)  # Ej: ["diabetes_type_2", "hypertension"]
     reported_symptoms: List[str] = field(default_factory=list) # Ej: ["chest_pain", "syncope"]
     allergies: List[str] = field(default_factory=list)         # Ej: ["penicillin"]
     initial_triage_category: str = "3_Urgent"                  # Sistema Mánchester
-    
-    triage_notes: str            # Texto libre escrito por enfermería al llegar
-    medical_history_text: str    # Resumen del historial médico previo
-    
     base_urgency_score: float = 0.0      # Puntaje algorítmico base (signos vitales/enfermedades)
     llm_context_modifier: float = 1.0    # Multiplicador ajustado por el LLM tras leer las notas
     final_priority_score: float = 0.0    # Puntuación final para el optimizador
-    
     needs_bed: int = 1                   # 1 si requiere cama, 0 si es consulta rápida ambulatoria
     doctor_time_estimated_min: int = 30  # Minutos estimados de atención
-    
     time_waiting_min: int = 0                  # Minutos reales que lleva esperando
     max_safe_wait_time_min: int = 60           # Límite seguro, inicializado según Mánchester
-    
     has_deteriorated: bool = False             # True si sufre un evento en la sala (convulsión, desmayo)
     deterioration_event_notes: str = ""        # Contexto del evento para que el LLM lo evalúe
-    
     requires_equipment: List[str] = field(default_factory=list)  # Validado contra equipment_constants.py
     requires_specialist: List[str] = field(default_factory=list) # Validado contra specialists_constants.py
