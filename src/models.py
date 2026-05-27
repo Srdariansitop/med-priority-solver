@@ -1,31 +1,87 @@
 from dataclasses import dataclass, field
-from typing import List, Dict, Optional
+from typing import List, Dict
 from datetime import datetime
+
 from .chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+
+# Tiempos máximos de espera permitidos (en minutos) por categoría Mánchester
+MAX_WAIT_TIMES: Dict[str, int] = {
+    "1_Resuscitation": 0,    
+    "2_Emergent": 10,        
+    "3_Urgent": 60,          
+    "4_Standard": 120,       
+    "5_Routine": 240         
+}
 
 @dataclass
 class HospitalResources:
-    """Define los límites físicos, de personal y equipamiento del entorno."""
+    """Define los límites físicos, de personal y equipamiento de un Hospital Nivel IV."""
     hospital_name: str
 
     standard_beds_available: int      # Camillas normales de urgencias (Pacientes amarillos/verdes)
     trauma_beds_available: int        # Boxes de reanimación (Solo para pacientes "1_Resuscitation")
     isolation_beds_available: int     # Habitaciones de presión negativa (Si patient.is_isolated == True)
-    icu_beds_available: int           # Camas de Cuidados Intensivos (Para post-cirugía o casos críticos)
+    icu_beds_available: int           # Camas de Cuidados Intensivos (Post-cirugía o críticos)
+    operating_rooms_available: int    # Quirófanos libres
    
     triage_nurses_available: int      # Atienden la puerta, determinan el AVPU inicial
-    general_doctors_available: int    # Médicos de urgencias (consumen el doctor_time_estimated_min)
-    specialists_available: int        # Cirujanos, neurólogos, etc. (Casos muy complejos)
+    general_doctors_available: int    # Médicos de urgencias (Filtro inicial)
+    available_doctors_time_minutes: int # Capacidad de tiempo global para el turno
+    intensivists_available: int       # Médicos de UCI (Cruciales para pacientes críticos)
+    anesthesiologists_available: int  # Indispensables para quirófano o intubaciones difíciles
     
-    # Capacidad de tiempo global para el turno
-    available_doctors_time_minutes: int 
-    ventilators_available: int        # Respiradores artificiales (Clave si la oxigenación es bajísima o Glasgow < 8)
-    operating_rooms_available: int    # Quirófanos libres
+    cardiologists_available: int      # Infartos, arritmias graves
+    neurologists_available: int       # ACV, convulsiones
+    pulmonologists_available: int     # Fallo respiratorio severo
+    gastroenterologists_available: int # Sangrado digestivo masivo
+    nephrologists_available: int      # Falla renal aguda
+    endocrinologists_available: int   # Cetoacidosis diabética, crisis tiroidea
+    hematologists_available: int      # Trastornos de coagulación severos
+    oncologists_available: int        # Complicaciones oncológicas agudas
+    infectious_disease_specialists_available: int # Sepsis, infecciones raras
+    rheumatologists_available: int    # Brotes autoinmunes severos
+    toxicologists_available: int      # Sobredosis, envenenamientos
+    
+    general_surgeons_available: int   # Apendicitis, traumas abdominales
+    cardiovascular_surgeons_available: int # Aneurismas, traumas de grandes vasos
+    neurosurgeons_available: int      # Traumas craneales, hematomas cerebrales
+    orthopedic_surgeons_available: int # Fracturas expuestas, poli-traumatismos
+    plastic_surgeons_available: int   # Reconstrucción de tejidos blandos
+    burn_surgeons_available: int      # Cirujanos especialistas en grandes quemados
+    maxillofacial_surgeons_available: int # Traumas faciales severos
+    urologists_available: int         # Cálculos renales obstructivos, trauma pélvico
+    otolaryngologists_available: int  # Obstrucciones severas de vía aérea superior
+    
+    pediatricians_available: int      # Pacientes < 18 años
+    neonatologists_available: int     # Recién nacidos en estado crítico
+    obstetricians_available: int      # Pacientes embarazadas
+    gynecologists_available: int      # Emergencias ginecológicas
+    psychiatrists_available: int      # Brotes psicóticos, riesgo suicida
+    ophthalmologists_available: int   # Traumas oculares severos
     
 
-    # "Diversion status": Cuando un hospital colapsa, avisa a las ambulancias que vayan a otro lado.
-    # En tu algoritmo, si los recursos críticos llegan a 0, esto cambia a True.
-    is_on_diversion: bool = False
+    # Equipamiento crítico para soporte vital, diagnóstico y procedimientos específicos
+    ventilators_available: int        # Respiradores artificiales
+    defibrillators_available: int     # Desfibriladores para paros cardíacos
+    ecmo_machines_available: int      # Oxigenación por membrana extracorpórea
+    cardiopulmonary_bypass_machines_available: int # Máquinas de circulación extracorpórea
+    crash_carts_available: int        # Carros de paro equipados
+
+    ct_scanners_available: int        # Tomógrafos (TAC)
+    mri_machines_available: int       # Resonancia magnética
+    x_ray_machines_available: int     # Salas de Rayos X fijas
+    portable_x_rays_available: int    # Máquinas de Rayos X portátiles
+    ultrasound_machines_available: int # Ecógrafos
+    ecg_machines_available: int       # Electrocardiógrafos
+    eeg_machines_available: int       # Electroencefalogramas (actividad cerebral)
+    fluoroscopy_machines_available: int # Fluoroscopia (Rayos X en tiempo real)
+    
+    dialysis_machines_available: int  # Máquinas de diálisis
+    endoscopy_towers_available: int   # Torres de endoscopia (procedimientos gastrointestinales)
+    hyperbaric_chambers_available: int # Cámaras hiperbáricas (intoxicación CO)
+    incubators_available: int         # Incubadoras para el área de neonatología
+
+    is_on_diversion: bool = False     # True si el hospital colapsa y desvía ambulancias
     
 @dataclass
 class Vitals:
@@ -35,18 +91,13 @@ class Vitals:
     systolic_bp: int             # Presión sistólica (ej. 120)
     diastolic_bp: int            # Presión diastólica (ej. 80)
     temperature_c: float         # Temperatura en Celsius (ej. 37.5)
-    pain_level: int              # Escala del 1 al 10
-    # Escala AVPU estándar en urgencias: "Alert" (Alerta), "Voice" (Responde a la voz), 
-    # "Pain" (Responde al dolor), "Unresponsive" (Inconsciente/No responde)
-    consciousness_level: str = "Alert" 
-    # Escala de Coma de Glasgow (3 a 15). 15 es totalmente consciente, menos de 8 es coma/crítico.
-    # El LLM puede inferir este número si en la nota dice "paciente estuporoso que no abre los ojos".
-    glasgow_coma_scale: int = 15 
+    pain_level: int              # Escala del dolor del 1 al 10
+    consciousness_level: str = "Alert" # Escala AVPU: Alert, Voice, Pain, Unresponsive
+    glasgow_coma_scale: int = 15       # Escala GCS (3 a 15). Menor a 8 = coma/crítico
 
 @dataclass
 class Patient:
     """Modelo completo del paciente."""
-    # 1. Datos Demográficos y Administrativos
     patient_id: str
     first_name: str
     last_name: str
@@ -54,28 +105,30 @@ class Patient:
     gender: str                  # "M", "F", "Other"
     insurance_type: str          # "Public", "Private", "None"
     arrival_time: datetime       # Fundamental para desempatar y calcular tiempos de espera
-    is_pregnant: bool = False    # Las pacientes embarazadas tienen prioridad de triaje mandatoria
-    is_isolated: bool = False    # ¿Requiere aislamiento por sospecha de virus/bacteria contagiosa?
+    is_pregnant: bool = False    # Triaje prioritario / requiere obstetra
+    is_isolated: bool = False    # Requiere cama de presión negativa
     
-    # 2. Datos Estructurados Clínicos 
     vitals: Vitals
     chronic_diseases: List[str] = field(default_factory=list)  # Ej: ["diabetes_type_2", "hypertension"]
-    reported_symptoms: List[str] = field(default_factory=list) # Síntomas principales: ["chest_pain", "syncope"]
-    allergies: List[str] = field(default_factory=list)         # Alertas críticas de seguridad (ej: ["penicillin"])
+    reported_symptoms: List[str] = field(default_factory=list) # Ej: ["chest_pain", "syncope"]
+    allergies: List[str] = field(default_factory=list)         # Ej: ["penicillin"]
+    initial_triage_category: str = "3_Urgent"                  # Sistema Mánchester
     
-    # Clasificación inicial protocolar (Sistema Mánchester / Emergencia)
-    # Valores sugeridos: "1_Resuscitation" (Rojo), "2_Emergent" (Naranja), "3_Urgent" (Amarillo), "4_Standard" (Verde), "5_Routine" (Azul)
-    initial_triage_category: str = "3_Urgent"
-    
-    # 3. Datos No Estructurados 
-    triage_notes: str            # Texto libre escrito por enfermería al llegar (Ej: "Sufrió desmayo de 2 min...")
+    triage_notes: str            # Texto libre escrito por enfermería al llegar
     medical_history_text: str    # Resumen del historial médico previo
     
-    # 4. Variables Calculadas por el Sistema (Inicializadas en 0 / 1.0)
-    base_urgency_score: float = 0.0      # Calculado usando solo los signos vitales y algoritmos base
-    llm_context_modifier: float = 1.0    # El LLM lo ajusta (ej. 1.5 si detecta riesgo oculto en notas)
-    final_priority_score: float = 0.0    # Puntuación final para el algoritmo de optimización
+    base_urgency_score: float = 0.0      # Puntaje algorítmico base (signos vitales/enfermedades)
+    llm_context_modifier: float = 1.0    # Multiplicador ajustado por el LLM tras leer las notas
+    final_priority_score: float = 0.0    # Puntuación final para el optimizador
     
-    # 5. Requerimientos de Recursos (Variables para el optimizador)
-    needs_bed: int = 1                   # 1 si requiere cama, 0 si es consulta rápida/ambulatorio
-    doctor_time_estimated_min: int = 30  # Minutos estimados de atención requerida
+    needs_bed: int = 1                   # 1 si requiere cama, 0 si es consulta rápida ambulatoria
+    doctor_time_estimated_min: int = 30  # Minutos estimados de atención
+    
+    time_waiting_min: int = 0                  # Minutos reales que lleva esperando
+    max_safe_wait_time_min: int = 60           # Límite seguro, inicializado según Mánchester
+    
+    has_deteriorated: bool = False             # True si sufre un evento en la sala (convulsión, desmayo)
+    deterioration_event_notes: str = ""        # Contexto del evento para que el LLM lo evalúe
+    
+    requires_equipment: List[str] = field(default_factory=list)  # Validado contra equipment_constants.py
+    requires_specialist: List[str] = field(default_factory=list) # Validado contra specialists_constants.py
