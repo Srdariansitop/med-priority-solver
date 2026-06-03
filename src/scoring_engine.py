@@ -1,5 +1,6 @@
 from typing import List
-from models import Patient, Vitals
+from datetime import datetime
+from models import Patient, Vitals, MAX_WAIT_TIMES
 from chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
 
 def calculate_vitals_penalty(vitals: Vitals) -> float:
@@ -75,9 +76,29 @@ def calculate_base_urgency_score(patient: Patient) -> float:
     # Guardamos el resultado en la variable correspondiente del modelo
     patient.base_urgency_score = round(score, 2)
     
-    # Inicialmente, el score de prioridad final es igual al base antes de la IA
+    # Inicialmente, el score de prioridad final es igual al base
     patient.final_priority_score = patient.base_urgency_score
     
+    # -------------------------------------------------------------------------
+    # NUEVO: Paso D: Ajustes dinámicos por tiempo de espera y eventos en sala
+    # -------------------------------------------------------------------------
+    
+    # 1. Calcular cuántos minutos lleva esperando realmente desde que llegó
+    tiempo_espera_timedelta = datetime.now() - patient.arrival_time
+    patient.time_waiting_min = int(tiempo_espera_timedelta.total_seconds() / 60)
+    
+    # 2. Obtener su límite seguro según su categoría Mánchester
+    limite_seguro = MAX_WAIT_TIMES.get(patient.initial_triage_category, 120)
+    patient.max_safe_wait_time_min = limite_seguro
+    
+    # 3. Penalización drástica si ya rebasó el tiempo seguro
+    if patient.time_waiting_min > limite_seguro:
+        patient.final_priority_score += 50.0  # Lo empuja a las primeras posiciones
+        
+    # 4. Excepción de la vida real: Si la enfermera reporta un deterioro súbito en sala
+    if patient.has_deteriorated:
+        patient.final_priority_score += 100.0 # Emergencia absoluta (ej. desmayo)
+        
     return patient.base_urgency_score
 
 def score_entire_queue(patients: List[Patient]) -> List[Patient]:
