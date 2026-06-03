@@ -1,7 +1,7 @@
 from typing import List
 from datetime import datetime
 from models import Patient, Vitals, MAX_WAIT_TIMES
-from chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
 
 def calculate_vitals_penalty(vitals: Vitals) -> float:
     """Evalúa la estabilidad fisiológica del paciente sumando penalizaciones."""

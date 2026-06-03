@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from typing import List, Dict
 from datetime import datetime
-from chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
 
 # Tiempos máximos de espera permitidos (en minutos) por categoría Mánchester
 MAX_WAIT_TIMES: Dict[str, int] = {

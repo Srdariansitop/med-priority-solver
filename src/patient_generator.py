@@ -2,7 +2,7 @@ import random
 import uuid
 from datetime import datetime, timedelta
 from models import Patient, Vitals
-from chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
 
 # Listas básicas para generar identidades
 FIRST_NAMES = ["Carlos", "Ana", "Luis", "Maria", "Jorge", "Elena", "Miguel", "Lucia", "Diego", "Sofia", "Darian", "Laura"]
@@ -84,16 +84,3 @@ def generate_mock_patients(num_patients: int = 10) -> list[Patient]:
         patients.append(patient)
         
     return patients
-
-
-
-if __name__ == "__main__":
-    print("🏥 Generando flujo de pacientes en Urgencias...\n")
-    mock_db = generate_mock_patients(5) # Generamos 5 pacientes
-    
-    for p in mock_db:
-        embarazo = " (Embarazada)" if p.is_pregnant else ""
-        print(f"[{p.initial_triage_category}] ID: {p.patient_id} | {p.first_name} {p.last_name}, {p.age} años{embarazo}")
-        print(f"   -> FC: {p.vitals.heart_rate_bpm} lpm | SpO2: {p.vitals.oxygen_saturation_pct}% | GCS: {p.vitals.glasgow_coma_scale}")
-        print(f"   -> Enfermedades Crónicas: {p.chronic_diseases if p.chronic_diseases else 'Ninguna'}")
-        print("-" * 60)
