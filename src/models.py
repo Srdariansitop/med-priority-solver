@@ -2,6 +2,8 @@ from dataclasses import dataclass, field
 from typing import List, Dict
 from datetime import datetime
 from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+from dictionary.specialists_constants import VALID_SPECIALISTS
+from dictionary.equipment_constants import VALID_EQUIPMENT
 
 # Tiempos máximos de espera permitidos (en minutos) por categoría Mánchester
 MAX_WAIT_TIMES: Dict[str, int] = {
@@ -17,70 +19,23 @@ class HospitalResources:
     """Define los límites físicos, de personal y equipamiento de un Hospital Nivel IV."""
     hospital_name: str
 
+    # ===== INFRAESTRUCTURA FÍSICA =====
     standard_beds_available: int      # Camillas normales de urgencias (Pacientes amarillos/verdes)
     trauma_beds_available: int        # Boxes de reanimación (Solo para pacientes "1_Resuscitation")
     isolation_beds_available: int     # Habitaciones de presión negativa (Si patient.is_isolated == True)
     icu_beds_available: int           # Camas de Cuidados Intensivos (Post-cirugía o críticos)
     operating_rooms_available: int    # Quirófanos libres
-   
-
-    # Medicos y especialistas
-    triage_nurses_available: int      # Atienden la puerta, determinan el AVPU inicial
-    general_doctors_available: int    # Médicos de urgencias (Filtro inicial)
     available_doctors_time_minutes: int # Capacidad de tiempo global para el turno
-    intensivists_available: int       # Médicos de UCI (Cruciales para pacientes críticos)
-    anesthesiologists_available: int  # Indispensables para quirófano o intubaciones difíciles
-    
-    cardiologists_available: int      # Infartos, arritmias graves
-    neurologists_available: int       # ACV, convulsiones
-    pulmonologists_available: int     # Fallo respiratorio severo
-    gastroenterologists_available: int # Sangrado digestivo masivo
-    nephrologists_available: int      # Falla renal aguda
-    endocrinologists_available: int   # Cetoacidosis diabética, crisis tiroidea
-    hematologists_available: int      # Trastornos de coagulación severos
-    oncologists_available: int        # Complicaciones oncológicas agudas
-    infectious_disease_specialists_available: int # Sepsis, infecciones raras
-    rheumatologists_available: int    # Brotes autoinmunes severos
-    toxicologists_available: int      # Sobredosis, envenenamientos
-    
-    general_surgeons_available: int   # Apendicitis, traumas abdominales
-    cardiovascular_surgeons_available: int # Aneurismas, traumas de grandes vasos
-    neurosurgeons_available: int      # Traumas craneales, hematomas cerebrales
-    orthopedic_surgeons_available: int # Fracturas expuestas, poli-traumatismos
-    plastic_surgeons_available: int   # Reconstrucción de tejidos blandos
-    burn_surgeons_available: int      # Cirujanos especialistas en grandes quemados
-    maxillofacial_surgeons_available: int # Traumas faciales severos
-    urologists_available: int         # Cálculos renales obstructivos, trauma pélvico
-    otolaryngologists_available: int  # Obstrucciones severas de vía aérea superior
-    
-    pediatricians_available: int      # Pacientes < 18 años
-    neonatologists_available: int     # Recién nacidos en estado crítico
-    obstetricians_available: int      # Pacientes embarazadas
-    gynecologists_available: int      # Emergencias ginecológicas
-    psychiatrists_available: int      # Brotes psicóticos, riesgo suicida
-    ophthalmologists_available: int   # Traumas oculares severos
-    
 
-    # Equipamiento crítico para soporte vital, diagnóstico y procedimientos específicos
-    ventilators_available: int        # Respiradores artificiales
-    defibrillators_available: int     # Desfibriladores para paros cardíacos
-    ecmo_machines_available: int      # Oxigenación por membrana extracorpórea
-    cardiopulmonary_bypass_machines_available: int # Máquinas de circulación extracorpórea
-    crash_carts_available: int        # Carros de paro equipados
-
-    ct_scanners_available: int        # Tomógrafos (TAC)
-    mri_machines_available: int       # Resonancia magnética
-    x_ray_machines_available: int     # Salas de Rayos X fijas
-    portable_x_rays_available: int    # Máquinas de Rayos X portátiles
-    ultrasound_machines_available: int # Ecógrafos
-    ecg_machines_available: int       # Electrocardiógrafos
-    eeg_machines_available: int       # Electroencefalogramas (actividad cerebral)
-    fluoroscopy_machines_available: int # Fluoroscopia (Rayos X en tiempo real)
+    # ===== PERSONAL MÉDICO DINÁMICO =====
+    # Diccionario que mapea especialista -> cantidad disponible
+    # Inicializado con TODOS los especialistas válidos (ver VALID_SPECIALISTS)
+    specialists_available: Dict[str, int] = field(default_factory=lambda: {spec: 0 for spec in VALID_SPECIALISTS})
     
-    dialysis_machines_available: int  # Máquinas de diálisis
-    endoscopy_towers_available: int   # Torres de endoscopia (procedimientos gastrointestinales)
-    hyperbaric_chambers_available: int # Cámaras hiperbáricas (intoxicación CO)
-    incubators_available: int         # Incubadoras para el área de neonatología
+    # ===== EQUIPAMIENTO DINÁMICO =====
+    # Diccionario que mapea equipo -> cantidad disponible
+    # Inicializado con TODOS los equipos válidos (ver VALID_EQUIPMENT)
+    equipment_available: Dict[str, int] = field(default_factory=lambda: {equip: 0 for equip in VALID_EQUIPMENT})
 
     is_on_diversion: bool = False     # True si el hospital colapsa y desvía ambulancias
     
