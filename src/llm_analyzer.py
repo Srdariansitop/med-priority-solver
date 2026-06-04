@@ -32,6 +32,16 @@ def analyze_patient_with_ai(patient: Patient) -> Patient:
     3. "suggested_specialists": Lista de strings. Elige SOLO de esta lista permitida: {VALID_SPECIALISTS}
     4. "suggested_equipment": Lista de strings. Elige SOLO de esta lista permitida: {VALID_EQUIPMENT}
     
+    REGLAS ESTRICTAS DE GESTIÓN DE RECURSOS:
+    1. Eres un médico en un hospital público con recursos limitados. Practica la eficiencia.
+    2. ESTÁ PROHIBIDO pedir equipos de imagenología pesada (TAC, MRI) o quirófanos para pacientes con síntomas leves (resfriados, dolor abdominal leve, cefalea crónica sin signos de alarma).
+    3. Si el paciente tiene un problema de rutina (ej. congestión nasal, tos leve, dolor abdominal cólico sin peritonitis), NO pidas ningún equipo (deja la lista vacía o pide solo equipo básico de signos vitales).
+    4. Pedir un TAC para un resfriado común será considerado un fallo crítico del sistema.
+    5. Solo pide equipos de imagenología si hay:
+       - Signos de alarma evidentes (dolor torácico opresivo, abdomen agudo, trauma severo)
+       - Signos vitales críticos (hipotensión, hipoxia severa, taquicardia extrema)
+       - Síntomas neurológicos focales o deterioro del nivel de conciencia
+    
     No agregues introducciones, explicaciones ni formato markdown (como ```json) fuera de la estructura del JSON.
     """
 
@@ -46,6 +56,11 @@ def analyze_patient_with_ai(patient: Patient) -> Patient:
     """
 
     user_content = f"""
+    === EJEMPLO DE RESPUESTA ESPERADA PARA CASO LEVE ===
+    Contexto: Niño de 5 años con tos y fiebre leve.
+    Respuesta correcta: {{"ai_reasoning": "Infección viral leve, sin complicaciones", "llm_context_modifier": 1.0, "suggested_specialists": ["pediatrician"], "suggested_equipment": []}}
+    ===================================================
+
     ===DATOS DEMOGRÁFICOS Y ESTADO===
     PACIENTE: {patient.first_name} {patient.last_name}
     EDAD: {patient.age} años

@@ -51,14 +51,23 @@ def calculate_vitals_penalty(vitals: Vitals) -> float:
 
 def calculate_base_urgency_score(patient: Patient) -> float:
     """Calcula el score matemático definitivo combinando todos los factores objetivos."""
-    score = 0.0
+    
+    CATEGORY_BASE_SCORES = {
+        "1_Resuscitation": 50.0,
+        "2_Emergent": 30.0,
+        "3_Urgent": 15.0,
+        "4_Standard": 5.0,
+        "5_Routine": 2.0
+    }
+    
+    # Arrancamos con el valor de la categoría. Si no se mapea bien, por defecto usa 2.0
+    score = CATEGORY_BASE_SCORES.get(patient.initial_triage_category, 2.0)
 
     # Paso A: Evaluar el estado de los signos vitales
     score += calculate_vitals_penalty(patient.vitals)
 
     # Paso B: Sumar la carga de comorbilidades crónicas desde tu diccionario
     for disease in patient.chronic_diseases:
-        # Si la enfermedad existe en la tabla de pesos, sumamos su valor
         if disease in CHRONIC_DISEASE_WEIGHTS:
             score += CHRONIC_DISEASE_WEIGHTS[disease]
         else:
@@ -107,3 +116,4 @@ def score_entire_queue(patients: List[Patient]) -> List[Patient]:
     # Ordenar la lista: los scores más altos van primero
     patients.sort(key=lambda p: p.final_priority_score, reverse=True)
     return patients
+
