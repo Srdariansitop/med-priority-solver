@@ -79,9 +79,7 @@ def calculate_base_urgency_score(patient: Patient) -> float:
     # Inicialmente, el score de prioridad final es igual al base
     patient.final_priority_score = patient.base_urgency_score
     
-    # -------------------------------------------------------------------------
-    # NUEVO: Paso D: Ajustes dinámicos por tiempo de espera y eventos en sala
-    # -------------------------------------------------------------------------
+    # Paso D: Ajustes dinámicos por tiempo de espera y eventos en sala
     
     # 1. Calcular cuántos minutos lleva esperando realmente desde que llegó
     tiempo_espera_timedelta = datetime.now() - patient.arrival_time
