@@ -4,12 +4,12 @@ from dotenv import load_dotenv
 from models import Patient
 from dictionary.specialists_constants import VALID_SPECIALISTS  
 from dictionary.equipment_constants import VALID_EQUIPMENT
-from groq import Groq
+from groq_client import get_sync_client
 
 # Cargar variables de entorno desde .env
 load_dotenv()
 
-client = Groq(api_key=os.environ.get("GROQ_API_KEY"))
+client = get_sync_client()
 
 def analyze_patient_with_ai(patient: Patient) -> Patient:
     """
@@ -84,7 +84,7 @@ def analyze_patient_with_ai(patient: Patient) -> Patient:
                 {"role": "system", "content": system_prompt},
                 {"role": "user", "content": user_content}
             ],
-            model="llama-3.1-8b-instant", 
+            model="llama-3.3-70b-versatile", 
             temperature=0.0, # Temperatura 0 para que sea estrictamente analítico y determinista
             response_format={"type": "json_object"} # Forzar la salida a JSON
         )

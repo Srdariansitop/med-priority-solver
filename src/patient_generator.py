@@ -1,55 +1,66 @@
+import os
 import random
 import uuid
+import asyncio
 from datetime import datetime, timedelta
 from models import Patient, Vitals
-from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS
+from groq_client import get_async_client
+from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS, CHRONIC_DISEASE_AGE_RANGES
 
-# Listas básicas para generar identidades
-FIRST_NAMES = ["Carlos", "Ana", "Luis", "Maria", "Jorge", "Elena", "Miguel", "Lucia", "Diego", "Sofia", "Darian", "Laura"]
-LAST_NAMES = ["Garcia", "Martinez", "Lopez", "Gonzalez", "Perez", "Rodriguez", "Sanchez", "Ramirez", "Cruz", "Gomez"]
+client = get_async_client()
 
-CRITICAL_NOTES = [
-    "Paciente refiere dolor opresivo en región esternal. Menciona que siente 'un elefante sentado en el pecho' que se irradia a mandíbula y brazo izquierdo. Disnea evidente.",
-    "Traído por familiares tras sufrir pérdida súbita del conocimiento (síncope) en vía pública. Se observa desorientado, pálido y con sudoración profusa.",
-    "Dificultad respiratoria severa de inicio súbito. El paciente utiliza músculos accesorios para respirar y apenas puede articular frases completas.",
-    "Paciente ingresa con agitación psicomotriz severa, lenguaje incoherente y agresividad. Enfermería reporta ideación suicida activa y riesgo de autolisis."
-]
+SYSTEM_PROMPT = """Eres un médico de triaje en urgencias bajo extrema presión de tiempo.
+Tu única tarea es redactar la nota clínica de ingreso del paciente basándote en los datos proporcionados.
 
-NORMAL_NOTES = [
-    "Paciente acude por cefalea leve de 3 días de evolución que no cede con analgésicos comunes. Sin signos de focalización neurológica.",
-    "Ingresa por traumatismo en tobillo derecho tras tropiezo. Presenta leve edema, dolor a la palpación, pero deambula por sus propios medios.",
-    "Refiere congestión nasal, odinofagia y tos no productiva de 48 horas de evolución. Refiere malestar general leve.",
-    "Dolor abdominal difuso tipo cólico de baja intensidad, asociado a aparente ingesta de alimentos en mal estado. Sin signos de abdomen agudo."
-]
+REGLAS ESTRICTAS DE RESPUESTA (FALLO CRÍTICO SI NO SE CUMPLEN):
+1. Responde ÚNICAMENTE con el texto de la nota médica. Cero palabras adicionales.
+2. NO saludes, NO te despidas, NO confirmes la orden, NO uses viñetas ni formato Markdown.
+3. Usa terminología médica precisa, directa y telegráfica (máximo 2 a 3 oraciones cortas).
+4. Refleja la congruencia clínica: si los signos vitales son críticos, la nota debe sonar urgente y grave. Si son normales, refleja estabilidad o síntomas leves.
+5. IMPORTANTE: Termina SIEMPRE la nota con una breve conclusión sobre el estado del paciente o un punto final claro (ej: "Requiere evaluación urgente" o "Estado estable, seguimiento rutinario").
+6. Evita palabras técnicas como "score", "escala", "parámetros". Escribe de forma directa como si estuvieras describiendo al paciente en la camilla, no un reporte.
+"""
+
+# =====================================================================
+# DATOS DE IDENTIDAD
+# =====================================================================
+MALE_NAMES = ["Carlos", "Luis", "Jorge", "Miguel", "Diego", "Darian", "Alejandro", "Mateo", "Daniel", "Hugo", "Martin", "Lucas", "Marcos", "Juan", "Pedro", "Andres", "Fernando", "Gabriel"]
+FEMALE_NAMES = ["Ana", "Maria", "Elena", "Lucia", "Sofia", "Laura", "Valentina", "Camila", "Valeria", "Martina", "Daniela", "Julia", "Paula", "Emma", "Carmen", "Isabella", "Victoria", "Alba"]
+LAST_NAMES = ["Garcia", "Martinez", "Lopez", "Gonzalez", "Perez", "Rodriguez", "Sanchez", "Ramirez", "Cruz", "Gomez", "Fernandez", "Ruiz", "Diaz", "Alvarez", "Romero", "Torres", "Navarro"]
 
 DISEASE_DESCRIPTIONS = {
-    "chronic_kidney_disease_stage_5": "Insuficiencia Renal Crónica Estadio 5 en tratamiento de hemodiálisis (Lunes, Miércoles y Viernes).",
-    "leukemia": "Leucemia Mieloide Aguda en tratamiento con quimioterapia activa (último ciclo hace 5 días).",
-    "schizophrenia": "Trastorno esquizofrénico de larga evolución. Reporta abandono de tratamiento farmacológico hace semanas.",
-    "bronchiectasis": "Bronquiectasias infectadas recurrentes. Dependiente de oxígeno domiciliario nocturno a 2L/min.",
-    "major_depressive_disorder": "Trastorno depresivo mayor con antecedentes de intentos previos de autolisis.",
-    "polymyalgia_rheumatica": "Polimialgia reumática en tratamiento con corticoides sistémicos.",
-    "hypertension": "Hipertensión arterial bajo tratamiento médico irregular.",
-    "diabetes_type_2": "Diabetes Mellitus Tipo 2 con mal control metabólico."
+    "chronic_kidney_disease_stage_5": "Insuficiencia Renal Crónica Estadio 5 en tratamiento de hemodiálisis.",
+    "leukemia": "Leucemia Mieloide Aguda en tratamiento activo.",
+    "schizophrenia": "Trastorno esquizofrénico de larga evolución.",
+    "bronchiectasis": "Bronquiectasias infectadas recurrentes. O2 dependiente.",
+    "major_depressive_disorder": "Trastorno depresivo mayor.",
+    "hypertension": "HTA mal controlada.",
+    "diabetes_type_2": "DM2 con mal control metabólico."
 }
 
-
 def generate_random_vitals(is_critical: bool) -> Vitals:
-    """Genera signos vitales coherentes. Si es crítico, los valores son extremos."""
+    """Genera signos vitales numéricos base con validación fisiológica."""
     if is_critical:
-        # Signos vitales alterados (Ej: Shock, ACV, Infarto, Trauma severo)
+        # Para estado crítico: generar valores extremos pero fisiológicamente válidos
+        is_hypotensive = random.random() < 0.5
+        if is_hypotensive:
+            systolic_bp = random.randint(70, 85)
+            diastolic_bp = random.randint(40, 50)
+        else:
+            systolic_bp = random.randint(180, 220)
+            diastolic_bp = random.randint(100, 130)  # Asegurar que diastólica < sistólica
+        
         return Vitals(
             heart_rate_bpm=random.choice([random.randint(30, 50), random.randint(130, 180)]),
             oxygen_saturation_pct=random.randint(75, 92),
-            systolic_bp=random.choice([random.randint(70, 85), random.randint(180, 220)]),
-            diastolic_bp=random.choice([random.randint(40, 50), random.randint(110, 130)]),
+            systolic_bp=systolic_bp,
+            diastolic_bp=diastolic_bp,
             temperature_c=round(random.uniform(35.0, 40.5), 1),
             pain_level=random.randint(8, 10),
             consciousness_level=random.choice(["Voice", "Pain", "Unresponsive"]),
             glasgow_coma_scale=random.randint(3, 12)
         )
     else:
-        # Signos vitales normales o levemente alterados (Ej: Resfriado, esguince)
         return Vitals(
             heart_rate_bpm=random.randint(60, 100),
             oxygen_saturation_pct=random.randint(95, 100),
@@ -61,63 +72,132 @@ def generate_random_vitals(is_critical: bool) -> Vitals:
             glasgow_coma_scale=15
         )
 
-def generate_mock_patients(num_patients: int = 10) -> list[Patient]:
-    """Genera una lista de pacientes aleatorios llegando a urgencias."""
-    patients = []
+def generate_burst_arrivals(num_patients: int) -> list[datetime]:
+    """
+    Simula patrones de llegada. 
+    30% de probabilidad de generar una 'ráfaga' (burst) simulando un evento masivo (ej. choque).
+    """
     now = datetime.now()
+    times = []
+    is_burst_event = random.random() < 0.3
     
-    # Obtenemos la lista de enfermedades de tu diccionario
-    possible_diseases = list(CHRONIC_DISEASE_WEIGHTS.keys())
+    if is_burst_event:
+        # El 60% de los pacientes llega en una ventana crítica de 5 minutos
+        burst_size = int(num_patients * 0.6)
+        burst_time = now - timedelta(minutes=random.randint(30, 90))
+        
+        for _ in range(burst_size):
+            times.append(burst_time + timedelta(minutes=random.randint(0, 5)))
+        # El resto llega de forma distribuida
+        for _ in range(num_patients - burst_size):
+            times.append(now - timedelta(minutes=random.randint(0, 120)))
+    else:
+        # Tráfico normal: llegadas distribuidas en las últimas 2 horas
+        for _ in range(num_patients):
+            times.append(now - timedelta(minutes=random.randint(0, 120)))
+            
+    random.shuffle(times)
+    return times
+
+async def fetch_triage_note(patient_data: dict) -> str:
+    """Llamada asíncrona a Groq para generar la nota clínica única."""
+    # Construimos un payload claro para la IA
+    vitals = patient_data["vitals"]
+    prompt = (
+        f"Paciente: Edad {patient_data['age']}, Género {patient_data['gender']}. "
+        f"Gravedad general esperada: {'CRÍTICA/EMERGENCIA' if patient_data['is_critical'] else 'ESTABLE/RUTINA'}. "
+        f"Signos Vitales: FC {vitals.heart_rate_bpm} lpm, SatO2 {vitals.oxygen_saturation_pct}%, "
+        f"PA {vitals.systolic_bp}/{vitals.diastolic_bp} mmHg, Temp {vitals.temperature_c}°C, "
+        f"Dolor {vitals.pain_level}/10, Glasgow {vitals.glasgow_coma_scale}/15, Estado: {vitals.consciousness_level}. "
+        f"Antecedentes: {patient_data['medical_history_text']}"
+    )
+
+    try:
+        completion = await client.chat.completions.create(
+            model="llama-3.3-70b-versatile", # Modelo potente (70B parámetros) para razonamiento médico de calidad
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.4, # Temperatura baja para mantener un tono formal y evitar alucinaciones creativas
+            max_tokens=150
+        )
+        return completion.choices[0].message.content.strip()
+    except Exception as e:
+        print(f"Error con la API de Groq: {e}")
+        return "Nota de triaje no disponible por fallo del sistema de dictado automático."
+
+async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
+    """Generador principal asíncrono."""
+    patients = []
+    all_possible_diseases = list(CHRONIC_DISEASE_WEIGHTS.keys())
+    arrival_times = generate_burst_arrivals(num_patients)
     
-    for _ in range(num_patients):
+    # 1. Preparar la estructura de datos para todos los pacientes
+    patient_payloads = []
+    
+    for i in range(num_patients):
         age = random.randint(1, 90)
         gender = random.choice(["M", "F", "Other"])
+        first_name = random.choice(MALE_NAMES) if gender == "M" else random.choice(FEMALE_NAMES) if gender == "F" else random.choice(MALE_NAMES + FEMALE_NAMES)
+        last_name = random.choice(LAST_NAMES)
         
-        # 20% de probabilidad de que el paciente llegue en estado crítico
-        is_critical = random.random() < 0.2 
-        
-        # Le asignamos entre 0 y 3 enfermedades crónicas aleatorias
-        num_diseases = random.randint(0, 3)
-        patient_diseases = random.sample(possible_diseases, num_diseases)
-        
+        is_critical = random.random() < 0.2
         vitals = generate_random_vitals(is_critical)
         
-        # Estimación cruda del triaje inicial basado en la gravedad
+        # Filtro de edad
+        valid_diseases = [d for d in all_possible_diseases if CHRONIC_DISEASE_AGE_RANGES.get(d, (18, 120))[0] <= age <= CHRONIC_DISEASE_AGE_RANGES.get(d, (18, 120))[1]]
+        patient_diseases = random.sample(valid_diseases, random.randint(0, min(3, len(valid_diseases))))
+        
+        medical_history_text = "Sin antecedentes relevantes." if not patient_diseases else " ".join([DISEASE_DESCRIPTIONS.get(d, f"{d.replace('_', ' ').title()}.") for d in patient_diseases])
+
+        # Determinamos el triaje base (que ahora la nota de IA justificará)
         if is_critical:
             initial_triage = random.choice(["1_Resuscitation", "2_Emergent"])
         else:
             initial_triage = random.choice(["3_Urgent", "4_Standard", "5_Routine"])
 
-        if is_critical:
-            triage_notes = random.choice(CRITICAL_NOTES)
-        else:
-            triage_notes = random.choice(NORMAL_NOTES)
+        patient_payloads.append({
+            "patient_id": f"PAT-{uuid.uuid4().hex[:6].upper()}",
+            "first_name": first_name,
+            "last_name": last_name,
+            "age": age,
+            "gender": gender,
+            "arrival_time": arrival_times[i],
+            "is_pregnant": (gender == "F" and 15 <= age <= 45 and random.random() < 0.05),
+            "insurance_type": random.choice(["Public", "Private", "None"]),
+            "vitals": vitals,
+            "chronic_diseases": patient_diseases,
+            "medical_history_text": medical_history_text,
+            "initial_triage_category": initial_triage,
+            "is_critical": is_critical
+        })
 
-        if not patient_diseases:
-            medical_history_text = "Sin historial médico de relevancia."
-        else:
-            history_pieces = [DISEASE_DESCRIPTIONS.get(d, f"Antecedente diagnosticado de {d.replace('_', ' ')}.") for d in patient_diseases]
-            medical_history_text = " ".join(history_pieces)
+    # 2. PARALELISMO RADICAL: Lanzar todas las peticiones a Groq al mismo tiempo
+    tasks = [fetch_triage_note(payload) for payload in patient_payloads]
+    generated_notes = await asyncio.gather(*tasks)
 
+    # 3. Ensamblar los objetos Patient finales
+    for payload, note in zip(patient_payloads, generated_notes):
         patient = Patient(
-            patient_id=f"PAT-{uuid.uuid4().hex[:6].upper()}",
-            first_name=random.choice(FIRST_NAMES),
-            last_name=random.choice(LAST_NAMES),
-            age=age,
-            gender=gender,
-            insurance_type=random.choice(["Public", "Private", "None"]),
-            # Simulamos que llegaron en algún momento de las últimas 2 horas
-            arrival_time=now - timedelta(minutes=random.randint(0, 120)), 
-            is_pregnant=(gender == "F" and 15 <= age <= 45 and random.random() < 0.05),
-            
-            vitals=vitals,
-            chronic_diseases=patient_diseases,
-            
-            # Ahora inyectamos las notas e historial enriquecidos semánticamente
-            triage_notes=triage_notes, 
-            medical_history_text=medical_history_text,
-            initial_triage_category=initial_triage
+            patient_id=payload["patient_id"],
+            first_name=payload["first_name"],
+            last_name=payload["last_name"],
+            age=payload["age"],
+            gender=payload["gender"],
+            insurance_type=payload["insurance_type"],
+            arrival_time=payload["arrival_time"],
+            is_pregnant=payload["is_pregnant"],
+            vitals=payload["vitals"],
+            chronic_diseases=payload["chronic_diseases"],
+            triage_notes=note, # ¡Aquí entra la magia de la IA!
+            medical_history_text=payload["medical_history_text"],
+            initial_triage_category=payload["initial_triage_category"]
         )
         patients.append(patient)
         
     return patients
+
+def generate_mock_patients(num_patients: int = 10) -> list[Patient]:
+    """Wrapper síncrono para generate_mock_patients_async."""
+    return asyncio.run(generate_mock_patients_async(num_patients))

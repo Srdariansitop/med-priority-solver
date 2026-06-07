@@ -82,3 +82,9 @@ class Patient:
     deterioration_event_notes: str = ""        # Contexto del evento para que el LLM lo evalúe
     requires_equipment: List[str] = field(default_factory=list)  # Validado contra equipment_constants.py
     requires_specialist: List[str] = field(default_factory=list) # Validado contra specialists_constants.py
+    
+    # ===== CAMPOS PARA RED DE HOSPITALES =====
+    arrival_hospital_id: str = "HOSP-01"      # ID del hospital donde llega el paciente
+    current_hospital_id: str = "HOSP-01"      # ID del hospital donde está actualmente (puede cambiar por transferencia)
+    status: str = "Waiting"                    # Estado: "Waiting", "In-Treatment", "Discharged", "Transferred", "Deceased"
+    ai_reasoning: str = ""                    # Razonamiento clínico de la IA (para logs y auditoría)

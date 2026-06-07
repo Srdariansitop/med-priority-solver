@@ -67,8 +67,8 @@ def main():
         analyze_patient_with_ai(patient)
 
     print("📊 4. Ordenando fila de urgencias...")
-    # Ordenamos de mayor a menor basándonos en el score definitivo
-    patients.sort(key=lambda x: x.final_priority_score, reverse=True)
+    # Ordenamos por score (mayor a menor), con tie-breaker: quien llegó primero va primero (arrival_time ascendente)
+    patients.sort(key=lambda x: (-x.final_priority_score, x.arrival_time))
 
     # Imprimir datos iniciales
     print_initial_patient_data(patients)

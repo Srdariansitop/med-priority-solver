@@ -235,3 +235,59 @@ CHRONIC_DISEASE_WEIGHTS: Dict[str, float] = {
     "chronic_inflammation": 1.8,
     "pressure_ulcers_chronic": 2.2,
 }
+
+# =====================================================================
+# RANGOS DE EDAD PERMITIDOS PARA ENFERMEDADES (Tupla: min_edad, max_edad)
+# Si una enfermedad no está en este mapa, el generador asumirá que
+# es una enfermedad exclusiva de adultos (18 a 120 años).
+# =====================================================================
+CHRONIC_DISEASE_AGE_RANGES: Dict[str, tuple] = {
+    # Pediátricas y de cualquier edad (0 a 120)
+    "diabetes_type_1": (0, 120),
+    "asthma": (0, 120),
+    "severe_asthma": (0, 120),
+    "cystic_fibrosis": (0, 120),
+    "epilepsy": (0, 120),
+    "cerebral_palsy": (0, 120),
+    "leukemia": (0, 120),
+    "lymphoma": (0, 120),
+    "sickle_cell_disease": (0, 120),
+    "thalassemia": (0, 120),
+    "hemophilia": (0, 120),
+    "down_syndrome": (0, 120),
+    "marfan_syndrome": (0, 120),
+    "ehlers_danlos_syndrome": (0, 120),
+    "turner_syndrome": (0, 120),
+    "muscular_dystrophy": (0, 120),
+    "anemia_chronic": (0, 120),
+    "iron_deficiency_anemia": (0, 120),
+    "eczema_chronic": (0, 120),
+    "malnutrition_chronic": (0, 120),
+    "wheelchair_dependency": (0, 120),
+    "organ_transplant_history": (0, 120),
+    
+    # Adolescentes y niños mayores
+    "attention_deficit_hyperactivity_disorder": (4, 120),
+    "autism_spectrum_disorder": (2, 120),
+    "scoliosis": (10, 120),
+    "obesity_class_1": (5, 120),
+    "obesity_class_2": (10, 120),
+    "obesity_class_3": (12, 120),
+    
+    # Exclusivas de adultos mayores (60+)
+    "alzheimers_disease": (60, 120),
+    "dementia": (65, 120),
+    "parkinsons_disease": (50, 120),
+    "macular_degeneration": (60, 120),
+    "frailty_syndrome": (70, 120),
+    "osteoporosis": (50, 120),
+    "prostate_cancer_history": (50, 120),
+    "chronic_kidney_disease_stage_4": (40, 120),
+    "chronic_kidney_disease_stage_5": (40, 120),
+    "dialysis_dependent": (40, 120),
+    "heart_failure": (50, 120),
+    "congestive_heart_failure": (50, 120),
+    "coronary_artery_disease": (40, 120),
+    "emphysema": (40, 120),
+    "osteoarthritis": (45, 120)
+}
