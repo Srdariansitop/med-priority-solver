@@ -4,10 +4,14 @@ import uuid
 import asyncio
 from datetime import datetime, timedelta
 from models import Patient, Vitals
-from groq_client import get_async_client
+from utils.groq_client import get_async_client
 from dictionary.chronic_disease_weights import CHRONIC_DISEASE_WEIGHTS, CHRONIC_DISEASE_AGE_RANGES
 
 client = get_async_client()
+
+# Procesamos de 1 en 1 para evitar por completo el límite estricto de 8000 TPM
+MAX_CONCURRENT_REQUESTS = 1
+semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
 
 SYSTEM_PROMPT = """Eres un médico de triaje en urgencias bajo extrema presión de tiempo.
 Tu única tarea es redactar la nota clínica de ingreso del paciente basándote en los datos proporcionados.
@@ -41,14 +45,13 @@ DISEASE_DESCRIPTIONS = {
 def generate_random_vitals(is_critical: bool) -> Vitals:
     """Genera signos vitales numéricos base con validación fisiológica."""
     if is_critical:
-        # Para estado crítico: generar valores extremos pero fisiológicamente válidos
         is_hypotensive = random.random() < 0.5
         if is_hypotensive:
             systolic_bp = random.randint(70, 85)
             diastolic_bp = random.randint(40, 50)
         else:
             systolic_bp = random.randint(180, 220)
-            diastolic_bp = random.randint(100, 130)  # Asegurar que diastólica < sistólica
+            diastolic_bp = random.randint(100, 130)
         
         return Vitals(
             heart_rate_bpm=random.choice([random.randint(30, 50), random.randint(130, 180)]),
@@ -73,26 +76,20 @@ def generate_random_vitals(is_critical: bool) -> Vitals:
         )
 
 def generate_burst_arrivals(num_patients: int) -> list[datetime]:
-    """
-    Simula patrones de llegada. 
-    30% de probabilidad de generar una 'ráfaga' (burst) simulando un evento masivo (ej. choque).
-    """
+    """Simula patrones de llegada aleatorios o ráfagas."""
     now = datetime.now()
     times = []
     is_burst_event = random.random() < 0.3
     
     if is_burst_event:
-        # El 60% de los pacientes llega en una ventana crítica de 5 minutos
         burst_size = int(num_patients * 0.6)
         burst_time = now - timedelta(minutes=random.randint(30, 90))
         
         for _ in range(burst_size):
             times.append(burst_time + timedelta(minutes=random.randint(0, 5)))
-        # El resto llega de forma distribuida
         for _ in range(num_patients - burst_size):
             times.append(now - timedelta(minutes=random.randint(0, 120)))
     else:
-        # Tráfico normal: llegadas distribuidas en las últimas 2 horas
         for _ in range(num_patients):
             times.append(now - timedelta(minutes=random.randint(0, 120)))
             
@@ -100,8 +97,7 @@ def generate_burst_arrivals(num_patients: int) -> list[datetime]:
     return times
 
 async def fetch_triage_note(patient_data: dict) -> str:
-    """Llamada asíncrona a Groq para generar la nota clínica única."""
-    # Construimos un payload claro para la IA
+    """Llamada asíncrona a Groq con manejo estricto de Rate Limits (429) y Semáforos."""
     vitals = patient_data["vitals"]
     prompt = (
         f"Paciente: Edad {patient_data['age']}, Género {patient_data['gender']}. "
@@ -112,28 +108,41 @@ async def fetch_triage_note(patient_data: dict) -> str:
         f"Antecedentes: {patient_data['medical_history_text']}"
     )
 
-    try:
-        completion = await client.chat.completions.create(
-            model="llama-3.3-70b-versatile", # Modelo potente (70B parámetros) para razonamiento médico de calidad
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": prompt}
-            ],
-            temperature=0.4, # Temperatura baja para mantener un tono formal y evitar alucinaciones creativas
-            max_tokens=150
-        )
-        return completion.choices[0].message.content.strip()
-    except Exception as e:
-        print(f"Error con la API de Groq: {e}")
-        return "Nota de triaje no disponible por fallo del sistema de dictado automático."
+    max_retries = 5
+    base_wait_time = 4.5  # Tiempo prudencial óptimo basado en logs
+
+    for attempt in range(max_retries):
+        async with semaphore:
+            try:
+                completion = await client.chat.completions.create(
+                    model="llama-3.3-70b-versatile",
+                    messages=[
+                        {"role": "system", "content": SYSTEM_PROMPT},
+                        {"role": "user", "content": prompt}
+                    ],
+                    temperature=0.4,
+                    max_tokens=150  # Subido a 150 para que las notas médicas se generen completas
+                )
+                return completion.choices[0].message.content.strip()
+                
+            except Exception as e:
+                error_str = str(e)
+                if "429" in error_str or "rate_limit" in error_str:
+                    wait_time = base_wait_time + random.uniform(0.5, 1.5)
+                    print(f"⚠️ [429 Rate Limit] Límite de tokens alcanzado. Esperando {wait_time:.2f}s antes de reintentar...")
+                    await asyncio.sleep(wait_time)
+                else:
+                    print(f"❌ Error inesperado en la API de Groq: {e}")
+                    break
+
+    return "Nota de triaje no disponible por fallo del sistema de dictado automático."
 
 async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
-    """Generador principal asíncrono."""
+    """Generador principal asíncrono optimizado."""
     patients = []
     all_possible_diseases = list(CHRONIC_DISEASE_WEIGHTS.keys())
     arrival_times = generate_burst_arrivals(num_patients)
     
-    # 1. Preparar la estructura de datos para todos los pacientes
     patient_payloads = []
     
     for i in range(num_patients):
@@ -145,13 +154,11 @@ async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
         is_critical = random.random() < 0.2
         vitals = generate_random_vitals(is_critical)
         
-        # Filtro de edad
         valid_diseases = [d for d in all_possible_diseases if CHRONIC_DISEASE_AGE_RANGES.get(d, (18, 120))[0] <= age <= CHRONIC_DISEASE_AGE_RANGES.get(d, (18, 120))[1]]
         patient_diseases = random.sample(valid_diseases, random.randint(0, min(3, len(valid_diseases))))
         
         medical_history_text = "Sin antecedentes relevantes." if not patient_diseases else " ".join([DISEASE_DESCRIPTIONS.get(d, f"{d.replace('_', ' ').title()}.") for d in patient_diseases])
 
-        # Determinamos el triaje base (que ahora la nota de IA justificará)
         if is_critical:
             initial_triage = random.choice(["1_Resuscitation", "2_Emergent"])
         else:
@@ -173,11 +180,9 @@ async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
             "is_critical": is_critical
         })
 
-    # 2. PARALELISMO RADICAL: Lanzar todas las peticiones a Groq al mismo tiempo
     tasks = [fetch_triage_note(payload) for payload in patient_payloads]
     generated_notes = await asyncio.gather(*tasks)
 
-    # 3. Ensamblar los objetos Patient finales
     for payload, note in zip(patient_payloads, generated_notes):
         patient = Patient(
             patient_id=payload["patient_id"],
@@ -190,7 +195,7 @@ async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
             is_pregnant=payload["is_pregnant"],
             vitals=payload["vitals"],
             chronic_diseases=payload["chronic_diseases"],
-            triage_notes=note, # ¡Aquí entra la magia de la IA!
+            triage_notes=note, 
             medical_history_text=payload["medical_history_text"],
             initial_triage_category=payload["initial_triage_category"]
         )
@@ -199,5 +204,5 @@ async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
     return patients
 
 def generate_mock_patients(num_patients: int = 10) -> list[Patient]:
-    """Wrapper síncrono para generate_mock_patients_async."""
+    """Wrapper síncrono para ejecutar el bucle de eventos."""
     return asyncio.run(generate_mock_patients_async(num_patients))

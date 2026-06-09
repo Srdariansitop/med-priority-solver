@@ -1,8 +1,6 @@
 import json
 import random
 from pathlib import Path
-
-# Importaciones de tu sistema real
 from models import HospitalResources
 from dictionary.specialists_constants import VALID_SPECIALISTS
 from dictionary.equipment_constants import VALID_EQUIPMENT

@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from models import Patient
 from dictionary.specialists_constants import VALID_SPECIALISTS  
 from dictionary.equipment_constants import VALID_EQUIPMENT
-from groq_client import get_sync_client
+from utils.groq_client import get_sync_client
 
 # Cargar variables de entorno desde .env
 load_dotenv()
