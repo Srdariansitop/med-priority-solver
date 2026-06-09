@@ -4,7 +4,7 @@ import os
 # Agregar el directorio padre (src) al path para importar correctamente
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from hospital_generator import HospitalGenerator
+from generator.hospital_generator import HospitalGenerator
 
 
 def print_hospital_details(hospital, tier_name):

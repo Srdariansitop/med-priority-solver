@@ -4,9 +4,9 @@ import os
 # Agregar el directorio padre (src) al path para importar correctamente
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from patient_generator import generate_mock_patients
-from scoring_engine import calculate_base_urgency_score
-from llm_analyzer import analyze_patient_with_ai
+from generator.patient_generator import generate_mock_patients
+from analyzer.scoring_engine import calculate_base_urgency_score
+from analyzer.llm_analyzer import analyze_patient_with_ai
 
 
 def print_initial_patient_data(patients):

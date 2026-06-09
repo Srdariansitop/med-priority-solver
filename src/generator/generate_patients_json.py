@@ -8,7 +8,7 @@ from dataclasses import is_dataclass, asdict
 # Asegurar que el directorio raíz del proyecto (src) esté en el sys.path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from patient_generator import generate_mock_patients
+from generator.patient_generator import generate_mock_patients
 
 HOSPITAL_IDS = [
     "HOSP-01", "HOSP-02", "HOSP-03", "HOSP-04", "HOSP-05",

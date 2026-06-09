@@ -6,8 +6,8 @@ if __name__ == "__main__":
     # Añadir el directorio padre (src) al path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     
-    from patient_generator import generate_mock_patients
-    from scoring_engine import score_entire_queue
+    from generator.patient_generator import generate_mock_patients
+    from analyzer.scoring_engine import score_entire_queue
     
     print("🔄 Generando 5 pacientes aleatorios...")
     sala_espera = generate_mock_patients(5)

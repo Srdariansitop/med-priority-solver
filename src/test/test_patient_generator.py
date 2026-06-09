@@ -6,7 +6,7 @@ if __name__ == "__main__":
     # Añadir el directorio padre (src) al path
     sys.path.insert(0, str(Path(__file__).parent.parent))
     
-    from patient_generator import generate_mock_patients
+    from generator.patient_generator import generate_mock_patients
     
     print("🏥 Generando flujo de pacientes en Urgencias...\n")
     mock_db = generate_mock_patients(5) # Generamos 5 pacientes
