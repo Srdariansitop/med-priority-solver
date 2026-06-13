@@ -1,4 +1,3 @@
-# equipment_constants.py
 """
 Diccionario CONSOLIDADO de todos los equipos médicos posibles en un Hospital Nivel IV.
 Mapea nombre de equipo -> descripción de función.

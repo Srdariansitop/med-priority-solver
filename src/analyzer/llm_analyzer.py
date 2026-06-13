@@ -1,23 +1,57 @@
+import warnings
+import logging
 import json
-import os
-from dotenv import load_dotenv
+import re
 from models import Patient
-from dictionary.specialists_constants import VALID_SPECIALISTS  
+from dictionary.specialists_constants import VALID_SPECIALISTS
 from dictionary.equipment_constants import VALID_EQUIPMENT
-from utils.groq_client import get_sync_client
+from transformers import pipeline
+import torch
 
-# Cargar variables de entorno desde .env
-load_dotenv()
 
-client = get_sync_client()
+# 1. SILENCIO ABSOLUTO: Apagamos las advertencias que frenan la consola de Windows
+warnings.filterwarnings("ignore")
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
+print("🧠 Inicializando pipeline local de Transformers (Modo Optimizado)...")
+
+try:
+    model_id = "Qwen/Qwen2.5-0.5B-Instruct"
+
+    ai_pipeline = pipeline(
+        "text-generation",
+        model=model_id,
+        device_map="auto",
+        dtype=torch.float16 if torch.cuda.is_available() else torch.float32
+    )
+    print(f"✅ Modelo {model_id} cargado exitosamente en el sistema.")
+except Exception as e:
+    print(f"❌ Error crítico al cargar el modelo local de Transformers: {e}")
+    ai_pipeline = None
+
+
+def _clean_and_parse_json(raw_text: str) -> dict:
+    try:
+        match = re.search(r"\{.*\}", raw_text, re.DOTALL)
+        if match:
+            return json.loads(match.group(0))
+        return json.loads(raw_text)
+    except Exception as e:
+        raise ValueError(f"Fallo en el parseo de JSON local. Texto crudo: {raw_text}. Error: {e}")
+
 
 def analyze_patient_with_ai(patient: Patient) -> Patient:
     """
-    Envía el contexto textual del paciente al LLM.
-    Asume que patient.base_urgency_score YA FUE CALCULADO por el motor matemático.
-    Extrae el multiplicador de prioridad, recursos sugeridos y actualiza el score final.
+    El paciente debe traer ya calculado su base_urgency_score desde scoring_engine.
+    Esta función solo se encarga de ajustarlo con el LLM y agregar penalizaciones operativas.
     """
-    
+    # Verificar que el score base exista (lo ponemos a 0.0 si no está)
+    if not hasattr(patient, 'base_urgency_score'):
+        patient.base_urgency_score = 0.0
+
+    # ------------------------------------------------------------
+    # Preparación del prompt para el LLM
+    # ------------------------------------------------------------
     system_prompt = f"""
     Eres el Sistema Experto de Inteligencia Artificial Médica de un Hospital de Nivel IV.
     Tu tarea es analizar las notas de triaje e historial de un paciente para detectar banderas rojas, 
@@ -34,15 +68,14 @@ def analyze_patient_with_ai(patient: Patient) -> Patient:
     
     REGLAS ESTRICTAS DE GESTIÓN DE RECURSOS:
     1. Eres un médico en un hospital público con recursos limitados. Practica la eficiencia.
-    2. ESTÁ PROHIBIDO pedir equipos de imagenología pesada (TAC, MRI) o quirófanos para pacientes con síntomas leves (resfriados, dolor abdominal leve, cefalea crónica sin signos de alarma).
-    3. Si el paciente tiene un problema de rutina (ej. congestión nasal, tos leve, dolor abdominal cólico sin peritonitis), NO pidas ningún equipo (deja la lista vacía o pide solo equipo básico de signos vitales).
+    2. ESTÁ PROHIBIDO pedir equipos de imagenología pesada (TAC, MRI) o quirófanos para pacientes con síntomas leves.
+    3. Si el paciente tiene un problema de rutina, NO pidas ningún equipo o pide solo lo básico.
     4. Pedir un TAC para un resfriado común será considerado un fallo crítico del sistema.
-    5. Solo pide equipos de imagenología si hay:
-       - Signos de alarma evidentes (dolor torácico opresivo, abdomen agudo, trauma severo)
-       - Signos vitales críticos (hipotensión, hipoxia severa, taquicardia extrema)
-       - Síntomas neurológicos focales o deterioro del nivel de conciencia
+    5. Solo pide equipos de imagenología si hay signos de alarma evidentes.
+    6. SOLICITA EQUIPAMIENTO DE SOPORTE VITAL AVANZADO (respirador, ECMO, desfibrilador) ÚNICAMENTE si el score matemático base es >= 30 y hay signos de fallo orgánico (p. ej., SpO2 < 90%, GCS <= 8, tensión arterial sistólica < 85 o > 180).
     
-    No agregues introducciones, explicaciones ni formato markdown (como ```json) fuera de la estructura del JSON.
+    IMPORTANTE: Tu respuesta debe comenzar directamente con la llave '{{' y terminar con '}}'.
+    No uses comillas invertidas, markdown o cualquier otro texto antes o después del JSON.
     """
 
     vitals_summary = f"""
@@ -56,18 +89,13 @@ def analyze_patient_with_ai(patient: Patient) -> Patient:
     """
 
     user_content = f"""
-    === EJEMPLO DE RESPUESTA ESPERADA PARA CASO LEVE ===
-    Contexto: Niño de 5 años con tos y fiebre leve.
-    Respuesta correcta: {{"ai_reasoning": "Infección viral leve, sin complicaciones", "llm_context_modifier": 1.0, "suggested_specialists": ["pediatrician"], "suggested_equipment": []}}
-    ===================================================
-
     ===DATOS DEMOGRÁFICOS Y ESTADO===
     PACIENTE: {patient.first_name} {patient.last_name}
     EDAD: {patient.age} años
     SEXO: {patient.gender}
     ¿ESTÁ EMBARAZADA?: {"SÍ" if patient.is_pregnant else "NO"}
     CATEGORÍA TRIAJE INICIAL: {patient.initial_triage_category}
-    SCORE MATEMÁTICO BASE: {getattr(patient, 'base_urgency_score', 0.0)}
+    SCORE MATEMÁTICO BASE (MANCHESTER): {patient.base_urgency_score}
 
     ===SIGNOS VITALES ACTUALES===
     {vitals_summary}
@@ -77,49 +105,99 @@ def analyze_patient_with_ai(patient: Patient) -> Patient:
     HISTORIAL MÉDICO (ANTECEDENTES): "{patient.medical_history_text}"
     LISTA DE CRÓNICOS RECONOCIDOS: {patient.chronic_diseases}
     """
+
+    if ai_pipeline is None:
+        return _apply_fallback(patient, "Pipeline local no inicializado.")
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_content}
+    ]
+
     try:
-        # Llamada a la API de Groq usando Llama 3
-        chat_completion = client.chat.completions.create(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content}
-            ],
-            model="llama-3.3-70b-versatile", 
-            temperature=0.0, # Temperatura 0 para que sea estrictamente analítico y determinista
-            response_format={"type": "json_object"} # Forzar la salida a JSON
+        outputs = ai_pipeline(
+            messages,
+            max_new_tokens=250,   # ← Aumentado para que el JSON no se trunque
+            do_sample=False,
+            return_full_text=False,
+            clean_up_tokenization_spaces=False
         )
-        
-        raw_response = chat_completion.choices[0].message.content
-        ai_response = json.loads(raw_response)
-        
-        # 1. Asignar el razonamiento (muy útil para los logs/terminal)
-        patient.ai_reasoning = ai_response.get("ai_reasoning", "Sin justificación.")
-        
-        # 2. Asignar y blindar el modificador
+
+        raw_response = outputs[0]["generated_text"]
+        ai_response = _clean_and_parse_json(raw_response)
+
+        patient.ai_reasoning = ai_response.get("ai_reasoning", "Procesado localmente.")
         patient.llm_context_modifier = float(ai_response.get("llm_context_modifier", 1.0))
-        
-        # 3. Filtrar Especialistas (Defensa estricta contra alucinaciones)
+
         ai_specialists = ai_response.get("suggested_specialists", [])
         patient.requires_specialist = [s for s in ai_specialists if s in VALID_SPECIALISTS]
-        
-        # 4. Filtrar Equipamiento (Defensa estricta contra alucinaciones)
-        ai_equipment = ai_response.get("suggested_equipment", [])
-        patient.requires_equipment = [e for e in ai_equipment if e in VALID_EQUIPMENT]
-        
-    except Exception as e:
-        print(f"⚠️ Error en la IA para {patient.first_name} {patient.last_name} (ID: {patient.patient_id}): {e}")
-        # Degradación elegante: Si la IA falla, el modificador es neutral
-        patient.ai_reasoning = "Error de conexión con la IA. Se aplica modelo matemático puro."
-        patient.llm_context_modifier = 1.0
-        patient.requires_specialist = []
-        patient.requires_equipment = []
 
-    # RECALCULAR EL SCORE FINAL COMBINADO
-    # Verificamos que base_urgency_score exista, por si acaso el motor matemático falló antes
-    base_score = getattr(patient, 'base_urgency_score', 0.0)
-    
-    # El score final es el matemático multiplicado por la intuición clínica de la IA
-    patient.final_priority_score = round(base_score * patient.llm_context_modifier, 2)
+        ai_equipment = ai_response.get("suggested_equipment", [])
+        # Primero filtramos solo equipos válidos
+        requested_equipment = [e for e in ai_equipment if e in VALID_EQUIPMENT]
+
+        # ------------------------------------------------------------
+        # NUEVOS FILTROS DE EFICIENCIA Y RACIONALIZACIÓN DE RECURSOS
+        # ------------------------------------------------------------
+        # Equipos considerados pesados o de soporte vital avanzado
+        HEAVY_EQUIPMENT = {
+            "defibrillator", "ecmo_machine", "ventilator",
+            "mri", "ct_scanner", "surgical_room"   # ajusta según tu diccionario real
+        }
+        UCI_EQUIPMENT = {"ecmo_machine", "ventilator", "defibrillator"}  # nivel UCI
+
+        # Filtro 1: si el triaje es bajo (categoría 4 o 5), eliminar equipos pesados
+        if patient.initial_triage_category in ("4_Standard", "5_Routine"):
+            requested_equipment = [e for e in requested_equipment if e not in HEAVY_EQUIPMENT]
+
+        # Filtro 2 corregido: solo anulamos equipamiento UCI si el modificador es <= 1.0
+        # Y además el paciente NO presenta signos vitales objetivamente críticos.
+        # Esto evita retirar soporte vital a pacientes que realmente lo necesitan.
+        vitals_criticos = (
+            patient.vitals.oxygen_saturation_pct < 90 or
+            patient.vitals.glasgow_coma_scale <= 8 or
+            patient.vitals.systolic_bp < 85 or patient.vitals.systolic_bp > 180 or
+            patient.vitals.heart_rate_bpm < 40 or patient.vitals.heart_rate_bpm > 140
+        )
+        if patient.llm_context_modifier <= 1.0 and not vitals_criticos:
+            requested_equipment = [e for e in requested_equipment if e not in UCI_EQUIPMENT]
+
+        patient.requires_equipment = requested_equipment
+
+    except Exception as e:
+        return _apply_fallback(patient, f"Excepción en pipeline local: {str(e)}")
+
+    # ------------------------------------------------------------
+    # PASO FINAL: Combinar score clínico ajustado por IA + penalizaciones operativas
+    # ------------------------------------------------------------
+    # 1. Score clínico ajustado por el LLM
+    adjusted_clinical = round(patient.base_urgency_score * patient.llm_context_modifier, 2)
+
+    # 2. Penalización por tiempo de espera (se supone que max_safe_wait_time_min y time_waiting_min ya los pobló scoring_engine)
+    waiting_penalty = 0.0
+    if getattr(patient, 'time_waiting_min', 0) > getattr(patient, 'max_safe_wait_time_min', 9999):
+        waiting_penalty = 50.0
+
+    # 3. Penalización por deterioro súbito en sala
+    deterioration_penalty = 100.0 if getattr(patient, 'has_deteriorated', False) else 0.0
+
+    # 4. Score final
+    patient.final_priority_score = adjusted_clinical + waiting_penalty + deterioration_penalty
 
     return patient
 
+
+def _apply_fallback(patient: Patient, error_msg: str) -> Patient:
+    """Modo seguro si la IA falla."""
+    patient.ai_reasoning = f"Degradación a modelo numérico puro. Motivo: {error_msg}"
+    patient.llm_context_modifier = 1.0
+    patient.requires_specialist = []
+    patient.requires_equipment = []
+
+    base_score = getattr(patient, 'base_urgency_score', 0.0)
+    waiting_penalty = 0.0
+    if getattr(patient, 'time_waiting_min', 0) > getattr(patient, 'max_safe_wait_time_min', 9999):
+        waiting_penalty = 50.0
+    deterioration_penalty = 100.0 if getattr(patient, 'has_deteriorated', False) else 0.0
+    patient.final_priority_score = round(base_score * 1.0, 2) + waiting_penalty + deterioration_penalty
+    return patient

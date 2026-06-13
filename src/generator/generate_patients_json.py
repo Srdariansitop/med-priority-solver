@@ -31,7 +31,7 @@ def safe_to_dict(obj):
             d['vitals'] = vars(d['vitals'])
         return d
 
-def generate_and_save_patients(num_patients: int = 50, output_file: str = "data/patients.json"):
+def generate_and_save_patients(num_patients: int = 100, output_file: str = "data/patients.json"):
     print(f"🔄 Solicitando {num_patients} notas de triaje a Groq API... (Procesando lote optimizado)")
     
     patients = generate_mock_patients(num_patients)
@@ -66,4 +66,4 @@ def generate_and_save_patients(num_patients: int = 50, output_file: str = "data/
     print(f"✅ ¡Éxito! {num_patients} pacientes listos para procesar en: {output_file}")
 
 if __name__ == "__main__":
-    generate_and_save_patients(50)
+    generate_and_save_patients(100)

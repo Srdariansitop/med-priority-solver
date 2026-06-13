@@ -1,4 +1,3 @@
-# specialists_constants.py
 """
 Diccionario CONSOLIDADO de todos los especialistas médicos posibles en un Hospital Nivel IV.
 Mapea nombre de especialista -> descripción de rol.

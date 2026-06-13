@@ -1,0 +1,6 @@
+transformers
+torch
+accelerate
+huggingface_hub
+groq
+python-dotenv
