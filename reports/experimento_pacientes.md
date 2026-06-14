@@ -126,10 +126,6 @@
 | HOSP-08 | PAT-E76A90 | Camila Ramirez | 5 | triage_nurse, general_doctor | ventilator, defibrillator, ecmo_machine |
 | HOSP-08 | PAT-551754 | Mateo Gomez | 5 | triage_nurse, general_doctor | ventilator, defibrillator, ecmo_machine |
 
-## Síntomas con mayor score
-| Síntoma | Score Prom. | Pacientes |
-|---------|------------|----------|
-
 ## Crónicos con mayor score
 | Enfermedad | Score Prom. | Pacientes |
 |------------|------------|----------|

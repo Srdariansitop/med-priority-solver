@@ -73,7 +73,7 @@ def calcular_metricas_pacientes(global_queues, transfer_log, tiempo_final):
                 "sobrepasa_por_min": sobrepasa,
                 "estado": estado,
                 "triage_inicial": p.initial_triage_category,
-                "sintomas": getattr(p, 'reported_symptoms', []),
+                "sintomas": getattr(p, 'symptoms', []),
                 "cronicos": getattr(p, 'chronic_diseases', []),
                 "total_recursos": total_rec,
                 "requiere_especialistas": especialistas,
@@ -133,14 +133,6 @@ def generar_reporte_pacientes(pacientes_info, traslados_detalle, ruta):
             esp = ", ".join(p["requiere_especialistas"]) or "Ninguno"
             eq = ", ".join(p["requiere_equipos"]) or "Ninguno"
             f.write(f"| {p['hospital']} | {p['id']} | {p['nombre']} | {p['total_recursos']} | {esp} | {eq} |\n")
-        # Síntomas/crónicos
-        f.write("\n## Síntomas con mayor score\n| Síntoma | Score Prom. | Pacientes |\n|---------|------------|----------|\n")
-        sintomas = defaultdict(list)
-        for p in pacientes_info:
-            for s in p["sintomas"]:
-                sintomas[s].append(p["score_final"])
-        for s, sc in sorted(sintomas.items(), key=lambda x: statistics.mean(x[1]), reverse=True):
-            f.write(f"| {s} | {statistics.mean(sc):.2f} | {len(sc)} |\n")
         # Crónicos
         cronicos = defaultdict(list)
         for p in pacientes_info:
