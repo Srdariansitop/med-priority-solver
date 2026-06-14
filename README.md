@@ -49,6 +49,22 @@ GROQ_API_KEY=tu_clave_aqui
 
 El modelo `Qwen/Qwen2.5-0.5B-Instruct` se descargará automáticamente en su primer uso. No requiere configuración adicional, aunque necesita conexión a Internet la primera vez.
 
+# 📁 Estructura del proyecto
+
+* `data/`: contiene los archivos JSON con los pacientes y la red de hospitales utilizados en las simulaciones.
+* `documentation/`: contiene la documentación técnica del proyecto, incluyendo la explicación de la arquitectura, módulos, metodología experimental y resultados obtenidos.
+* `reports/`: almacena los reportes generados a partir de los experimentos y simulaciones ejecutadas.
+* `src/analyzer/`: implementa el motor de priorización, incluyendo el sistema de puntuación matemática y el análisis mediante LLM local.
+* `src/dictionary/`: contiene constantes y datos estáticos del sistema, como enfermedades crónicas, especialistas y equipamiento médico válido.
+* `src/generator/`: incluye las herramientas encargadas de generar hospitales y pacientes sintéticos utilizando modelos probabilísticos y LLMs.
+* `src/test/`: contiene scripts independientes para validar de forma aislada cada componente del sistema.
+* `src/utils/`: proporciona utilidades auxiliares como la configuración del cliente de Groq para la interacción con el LLM externo.
+* `src/models.py`: define las clases principales del dominio, como pacientes, signos vitales y recursos hospitalarios.
+* `src/simulation_engine.py`: implementa el simulador principal encargado de gestionar la llegada de pacientes, asignación de hospitales y actualización dinámica de prioridades.
+* `src/generar_reporte.py`: genera los reportes finales con las métricas y resultados obtenidos durante las simulaciones.
+* `requirements.txt`: lista todas las dependencias necesarias para instalar y ejecutar el proyecto.
+* `README.md`: documentación principal del proyecto con instrucciones de instalación y uso.
+
 ## 🧪 Prueba del sistema
 
 Ejecuta el script de prueba:

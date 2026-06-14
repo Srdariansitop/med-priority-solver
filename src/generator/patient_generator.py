@@ -11,7 +11,7 @@ client = get_async_client()
 
 # Procesamos de 1 en 1 para evitar por completo el límite estricto de 8000 TPM
 MAX_CONCURRENT_REQUESTS = 1
-semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
 
 SYSTEM_PROMPT = """Eres un médico de triaje en urgencias bajo extrema presión de tiempo.
 Tu única tarea es redactar la nota clínica de ingreso del paciente basándote en los datos proporcionados.
@@ -96,7 +96,8 @@ def generate_burst_arrivals(num_patients: int) -> list[datetime]:
     random.shuffle(times)
     return times
 
-async def fetch_triage_note(patient_data: dict) -> str:
+# 🔧 Ahora fetch_triage_note recibe el semáforo como argumento
+async def fetch_triage_note(patient_data: dict, semaphore: asyncio.Semaphore) -> str:
     """Llamada asíncrona a Groq con manejo estricto de Rate Limits (429) y Semáforos."""
     vitals = patient_data["vitals"]
     prompt = (
@@ -139,6 +140,9 @@ async def fetch_triage_note(patient_data: dict) -> str:
 
 async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
     """Generador principal asíncrono optimizado."""
+    # ✅ El semáforo se crea DENTRO de la función asíncrona, ligado al event loop actual
+    semaphore = asyncio.Semaphore(MAX_CONCURRENT_REQUESTS)
+
     patients = []
     all_possible_diseases = list(CHRONIC_DISEASE_WEIGHTS.keys())
     arrival_times = generate_burst_arrivals(num_patients)
@@ -180,7 +184,8 @@ async def generate_mock_patients_async(num_patients: int = 10) -> list[Patient]:
             "is_critical": is_critical
         })
 
-    tasks = [fetch_triage_note(payload) for payload in patient_payloads]
+    # ✅ Pasamos el semáforo a cada tarea
+    tasks = [fetch_triage_note(payload, semaphore) for payload in patient_payloads]
     generated_notes = await asyncio.gather(*tasks)
 
     for payload, note in zip(patient_payloads, generated_notes):
